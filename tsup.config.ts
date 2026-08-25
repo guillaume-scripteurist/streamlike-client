@@ -7,15 +7,13 @@ const outExtension = ({ format }: { format: string }) => {
 };
 
 /**
- * Deux builds distincts, et non deux entrées d'un même build.
+ * Un seul build : le player et les URLs d'embed.
  *
- * Le mode dégradé (dépôt direct avec un jeton dans le navigateur) doit rester
- * visible à l'appel. En modules, c'est le sous-chemin d'import qui s'en charge
- * — `@mediatech/streamlike-client/unsafe-direct-upload` se remarque dans une
- * ligne d'import. En UMD, il n'y a pas d'import : c'est donc la balise
- * `<script>` et le nom du global qui doivent porter l'avertissement. Un seul
- * bundle les aurait fondus sous le même nom, et le mode dégradé serait devenu
- * indiscernable du reste.
+ * Il y avait ici un second build, `unsafe-direct-upload`, qui déposait un
+ * fichier sur l'API Streamlike depuis le navigateur — donc avec un jeton dans
+ * le navigateur. Il a été retiré : la voie GCS (ticket signé côté serveur, voir
+ * `@mediatech/secure-upload-core`) couvre désormais tous les cas, y compris
+ * ceux qui n'ont pas d'URL publique à offrir au callback.
  */
 export default defineConfig([
   {
@@ -25,18 +23,6 @@ export default defineConfig([
     globalName: 'MediatechStreamlikeClient',
     dts: true,
     clean: true,
-    sourcemap: true,
-    target: 'es2020',
-    outExtension,
-  },
-  {
-    name: 'unsafe-direct-upload',
-    entry: { 'unsafe-direct-upload': 'src/unsafe-direct-upload.ts' },
-    format: ['esm', 'cjs', 'iife'],
-    globalName: 'MediatechStreamlikeUnsafeUpload',
-    dts: true,
-    // Surtout pas de `clean` ici : il effacerait le build précédent.
-    clean: false,
     sourcemap: true,
     target: 'es2020',
     outExtension,

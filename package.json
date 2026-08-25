@@ -14,11 +14,6 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
-    },
-    "./unsafe-direct-upload": {
-      "types": "./dist/unsafe-direct-upload.d.ts",
-      "import": "./dist/unsafe-direct-upload.js",
-      "require": "./dist/unsafe-direct-upload.cjs"
     }
   },
   "files": [

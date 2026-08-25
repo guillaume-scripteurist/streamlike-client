@@ -75,23 +75,6 @@ bon format sans passer par la classe.
   recharge la page *courante* dans l'iframe, et le son continue par-dessus la
   suite du programme.
 
-## ⚠️ Le mode dégradé, à part
-
-`@mediatech/streamlike-client/unsafe-direct-upload` dépose un fichier directement
-sur l'API Streamlike depuis le navigateur — donc **avec un jeton dans le
-navigateur**. C'est une entorse assumée, réservée aux déploiements qui n'ont pas
-d'URL publique à offrir au callback Mediatech (la voie nominale, qui garde le
-jeton côté serveur — voir `@mediatech/secure-upload-core`).
-
-Il est sur un sous-chemin d'import et un global UMD distinct
-(`MediatechStreamlikeUnsafeUpload`) pour qu'on ne l'utilise pas sans l'avoir
-décidé : une ligne d'`import` qui se lit comme un avertissement vaut mieux qu'un
-commentaire que personne ne relit.
-
-Avant de l'employer, vérifier que le jeton porté par le ticket est **restreint au
-dépôt** et de durée courte, et que le CORS de l'API autorise l'origine de la page
-— sinon l'appel échoue sans détail exploitable, le navigateur masquant la réponse.
-
 ## Développement
 
 ```bash
