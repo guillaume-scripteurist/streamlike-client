@@ -12,7 +12,7 @@ const outExtension = ({ format }: { format: string }) => {
  * Il y avait ici un second build, `unsafe-direct-upload`, qui déposait un
  * fichier sur l'API Streamlike depuis le navigateur — donc avec un jeton dans
  * le navigateur. Il a été retiré : la voie GCS (ticket signé côté serveur, voir
- * `@mediatech/secure-upload-core`) couvre désormais tous les cas, y compris
+ * `@scripteurist/secure-upload-core`) couvre désormais tous les cas, y compris
  * ceux qui n'ont pas d'URL publique à offrir au callback.
  */
 export default defineConfig([

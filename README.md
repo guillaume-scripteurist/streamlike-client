@@ -1,4 +1,4 @@
-# @mediatech/streamlike-client
+# @scripteurist/streamlike-client
 
 Player Streamlike côté **navigateur** : URL d'embed et pilotage de l'iframe.
 Agnostique du framework, aucune dépendance. ESM / CJS / UMD.
@@ -14,7 +14,7 @@ très mal depuis une salle, et qu'il vaut mieux un seul endroit où chercher.
 
 ```jsonc
 "dependencies": {
-  "@mediatech/streamlike-client": "git+ssh://git@github.com/guillaume-scripteurist/streamlike-client.git#v0.1.0"
+  "@scripteurist/streamlike-client": "git+ssh://git@github.com/guillaume-scripteurist/streamlike-client.git#v0.1.0"
 }
 ```
 
@@ -28,7 +28,7 @@ Sans bundler, le build UMD suffit :
 ## Usage
 
 ```js
-import { StreamlikePlayer, EMBED_PRESETS, buildEmbedUrl } from '@mediatech/streamlike-client';
+import { StreamlikePlayer, EMBED_PRESETS, buildEmbedUrl } from '@scripteurist/streamlike-client';
 
 const player = new StreamlikePlayer(EMBED_PRESETS.broadcast);
 player.attach(document.getElementById('scene'));
