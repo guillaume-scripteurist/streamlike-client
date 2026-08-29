@@ -11,6 +11,14 @@
 /** Hôte du player. Service public, aucun jeton n'y transite. */
 export const STREAMLIKE_CDN = 'https://cdn.streamlike.com';
 
+/**
+ * Paramètres du player.
+ *
+ * Le player en accepte environ soixante-dix. Ceux qui portent un nom ici sont
+ * ceux dont un réglage erroné ne se voit pas tout de suite ; les autres passent
+ * par {@link EmbedOptions.params}, sans traduction, pour ne pas figer une liste
+ * qui bouge à chaque version de la plateforme.
+ */
 export interface EmbedOptions {
   /**
    * Remonter les événements de lecture par `postMessage` (`events=1`).
@@ -23,46 +31,193 @@ export interface EmbedOptions {
   /** Afficher le gros bouton de lecture central. */
   playButton?: boolean;
   /**
-   * Démarrer seul. Sur un écran TV, il n'y a personne pour cliquer — mais les
-   * navigateurs bloquent la lecture auto AVEC son sans interaction préalable :
-   * prévoir une porte « Activer le son » côté page.
+   * Démarrer seul.
+   *
+   * Sur un écran TV, il n'y a personne pour cliquer — mais **les navigateurs
+   * refusent une lecture automatique avec le son**. `autostart` sans `muted`
+   * est donc la panne la plus fréquente de tout ce fichier : la vidéo reste sur
+   * sa première image, sans erreur, sans message. La paire qui fonctionne est
+   * `autostart: true, muted: true`, avec une porte « activer le son » côté page.
    */
   autostart?: boolean;
-  /** Profil de player (« Webtv profile ») configuré sur le compte Streamlike. */
+  /**
+   * Couper le son. Voir {@link EmbedOptions.autostart} : c'est la moitié
+   * indispensable d'un démarrage autonome.
+   */
+  muted?: boolean;
+  /**
+   * **Configuration de player** enregistrée dans le back-office : couleurs,
+   * logo, contrôles, réglages par défaut. Les régler ici plutôt que dans l'URL
+   * permet de les changer sans redéployer.
+   *
+   * Un paramètre présent dans l'URL l'emporte sur la configuration.
+   */
+  pid?: string;
+  /**
+   * @deprecated Ancien nom de {@link EmbedOptions.pid}, qui émettait `profile=`
+   * — **un paramètre que le player ne connaît pas**. La configuration n'était
+   * donc jamais appliquée, en silence : le player retombait sur les réglages
+   * par défaut du compte, qui sont souvent proches, d'où l'absence de plainte.
+   * Traduit en `pid` depuis la 0.3.0. À remplacer chez les appelants.
+   */
   profileId?: string;
+  /**
+   * Identifiant de spectateur, jusqu'à 64 caractères, **choisi par nous**.
+   *
+   * C'est lui qui transforme des compteurs anonymes en chiffres par personne —
+   * reprise de lecture, engagement individuel. Il désigne quelqu'un : un
+   * identifiant de compte interne ou une valeur aléatoire, jamais une adresse
+   * e-mail ni rien de lisible.
+   */
+  userToken?: string;
+  /** Jeton de lecture d'un média protégé, signé par le serveur (`sltoken`). */
+  token?: string;
+  /** Position de départ, en secondes. */
+  startAt?: number;
+  /** Force la langue des sous-titres (`fr`), ou `false` pour les couper. */
+  subtitle?: string | false;
+  /** Force la piste audio (`en`) ; le suffixe `-ad` vise l'audiodescription. */
+  audioLanguage?: string;
+  /** Remplit la zone quitte à rogner l'image, plutôt que de la déformer. */
+  fillBrowser?: boolean;
+  /**
+   * Plafonne les qualités proposées. Sur un réseau de salle ou en données
+   * mobiles, c'est ce qui évite qu'un téléphone tire une échelle 1080p pour un
+   * player grand comme une carte.
+   */
+  maxHeight?: number;
+  maxWidth?: number;
+  /** Couleur des éléments actifs, hexadécimal **sans `#`**. */
+  activeColor?: string;
+  /** Retire contrôles et bouton de lecture et force la lecture — mode affichage. */
+  tv?: boolean;
+  /**
+   * Tout autre paramètre du player, tel quel.
+   *
+   * Les booléens sont convertis en `1`/`0`, les `null`/`undefined` ignorés.
+   * Un paramètre inconnu du player est ignoré par lui **sans erreur** : vérifier
+   * l'orthographe dans la table de `references/player-embed.md`.
+   */
+  params?: Record<string, string | number | boolean | null | undefined>;
   /** Hôte de remplacement (recette, instance dédiée). */
   baseUrl?: string;
+}
+
+/** Média visé : par permalink (préférable dans une URL vue par quelqu'un) ou par identifiant. */
+export interface MediaRef {
+  permalink?: string;
+  /**
+   * `media_id` de la plateforme. Le player le nomme `med_id` — même valeur,
+   * nom différent pour des raisons historiques.
+   */
+  mediaId?: string;
+  /** Canal en direct (`live_id`). */
+  liveId?: string;
+  /** Diffusion programmée (`str_id`). */
+  streamoutId?: string;
+}
+
+/** Le player lit `1`/`0` ; `false` sérialisé donnerait la chaîne « false », donc vrai. */
+function flag(value: boolean | undefined, fallback: boolean): string {
+  return ((value == null ? fallback : value) ? '1' : '0');
+}
+
+function applyOptions(params: URLSearchParams, options: EmbedOptions): void {
+  params.set('events', flag(options.events, false));
+  params.set('controls', flag(options.controls, true));
+  params.set('play_button', flag(options.playButton, true));
+  params.set('autostart', flag(options.autostart, false));
+  if (options.muted != null) params.set('muted', options.muted ? '1' : '0');
+
+  // `pid` est le nom réel ; `profileId` est l'ancien, qui émettait `profile=` —
+  // ignoré par le player. On traduit plutôt que de casser les appelants.
+  const pid = options.pid || options.profileId;
+  if (pid) params.set('pid', String(pid));
+
+  if (options.userToken) params.set('user_token', String(options.userToken).slice(0, 64));
+  if (options.token) params.set('sltoken', String(options.token));
+  if (options.startAt != null && options.startAt > 0) {
+    params.set('streamlike_mp_starttc', String(Math.floor(options.startAt)));
+  }
+  if (options.subtitle === false) params.set('subtitle', '0');
+  else if (options.subtitle) params.set('subtitle', String(options.subtitle));
+  if (options.audioLanguage) params.set('audio_lng', String(options.audioLanguage));
+  if (options.fillBrowser) params.set('fill_browser', '1');
+  if (options.maxHeight) params.set('max_height', String(Math.round(options.maxHeight)));
+  if (options.maxWidth) params.set('max_width', String(Math.round(options.maxWidth)));
+  // Hexadécimal SANS `#` : le `#` couperait l'URL au fragment, et tout ce qui
+  // suit la couleur disparaîtrait sans le moindre message.
+  if (options.activeColor) params.set('active_color', String(options.activeColor).replace(/^#/, ''));
+  if (options.tv) params.set('tv', '1');
+
+  for (const [key, value] of Object.entries(options.params || {})) {
+    if (value == null) continue;
+    params.set(key, typeof value === 'boolean' ? (value ? '1' : '0') : String(value));
+  }
 }
 
 /**
  * URL d'iframe pour un média, à partir de son permalink.
  *
- * @param permalink identifiant public du média
+ * Conservée telle quelle : c'est la signature qu'utilisent les pages
+ * existantes. {@link buildPlayerUrl} couvre les autres cas (identifiant, live,
+ * diffusion programmée).
  */
 export function buildEmbedUrl(permalink: string, options: EmbedOptions = {}): string {
+  return buildPlayerUrl({ permalink: String(permalink || '') }, options);
+}
+
+/**
+ * URL d'iframe pour n'importe quelle cible du player.
+ *
+ * `permalink` est préféré dans une URL que quelqu'un peut voir : il se lit, et
+ * il survit à une réimportation du média là où l'identifiant change.
+ */
+export function buildPlayerUrl(ref: MediaRef, options: EmbedOptions = {}): string {
   const base = (options.baseUrl || STREAMLIKE_CDN).replace(/\/+$/, '');
-  const params = new URLSearchParams({ permalink: String(permalink || '') });
-  // Le player lit `1`/`0` : un booléen JavaScript sérialisé en `false` serait
-  // pris pour une chaîne non vide, donc pour un « oui ».
-  const flag = (v: boolean | undefined, dflt: boolean) => ((v == null ? dflt : v) ? '1' : '0');
-  params.set('events', flag(options.events, false));
-  params.set('controls', flag(options.controls, true));
-  params.set('play_button', flag(options.playButton, true));
-  params.set('autostart', flag(options.autostart, false));
-  if (options.profileId) params.set('profile', options.profileId);
+  const params = new URLSearchParams();
+  if (ref.permalink) params.set('permalink', String(ref.permalink));
+  else if (ref.mediaId) params.set('med_id', String(ref.mediaId));
+  else if (ref.liveId) params.set('live_id', String(ref.liveId));
+  else if (ref.streamoutId) params.set('str_id', String(ref.streamoutId));
+  applyOptions(params, options);
   return `${base}/play?${params.toString()}`;
 }
 
 /**
- * Réglages des deux usages du jeu, pour ne pas les redécrire à chaque appel.
+ * Réglages des usages courants, pour ne pas les redécrire à chaque appel.
  *
  * `broadcast` — diffusion sur un écran (TV spectateur, téléphone joueur) :
  *   personne pour cliquer, on masque les contrôles et on écoute la fin de
- *   lecture pour enchaîner.
+ *   lecture pour enchaîner. **`muted` y est indispensable** : sans lui le
+ *   navigateur refuse le démarrage autonome, et l'écran reste figé.
  * `preview`   — prévisualisation dans la console : l'organisateur pilote, on
  *   lui laisse les contrôles et on ne démarre pas dans son dos.
+ * `feed`      — carte d'un fil vertical sur téléphone : remplit la carte,
+ *   démarre en silence, et plafonne la qualité pour ne pas vider le forfait.
  */
 export const EMBED_PRESETS = {
-  broadcast: { events: true, controls: false, playButton: false, autostart: true },
+  broadcast: { events: true, controls: false, playButton: false, autostart: true, muted: true },
   preview: { events: true, controls: true, playButton: true, autostart: false },
+  feed: {
+    events: true, controls: false, playButton: false, autostart: true, muted: true,
+    fillBrowser: true, maxHeight: 720,
+  },
 } as const satisfies Record<string, EmbedOptions>;
+
+/**
+ * Hauteur de l'enveloppe responsive, en pourcentage, pour un rapport donné.
+ *
+ * L'iframe n'a pas de taille propre : on l'enferme dans une boîte dont le
+ * `padding-top` porte le rapport. `ratio` vient de `metadata.global.ratio` de
+ * `/ws/media` ; 16/9 quand la plateforme ne l'a pas calculé — mieux vaut une
+ * boîte un peu fausse qu'une boîte de hauteur nulle, qui ne montre rien.
+ */
+export function aspectRatioPadding(ratio: number | null | undefined): string {
+  const value = Number(ratio);
+  const safe = Number.isFinite(value) && value > 0 ? value : 16 / 9;
+  // Les zéros de fin sont retirés : la valeur finit dans un attribut `style`,
+  // que le navigateur normalise de son côté — les comparer sans ça donne des
+  // tests qui échouent sur un « 50.0000% » devenu « 50% ».
+  return `${Number((100 / safe).toFixed(4))}%`;
+}

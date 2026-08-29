@@ -1,6 +1,7 @@
 # @scripteurist/streamlike-client
 
-Player Streamlike côté **navigateur** : URL d'embed et pilotage de l'iframe.
+Player Streamlike côté **navigateur** : URL d'embed, pilotage de l'iframe,
+enveloppe responsive et lecture des protections.
 Agnostique du framework, aucune dépendance. ESM / CJS / UMD.
 
 ## À quoi ça sert
@@ -14,7 +15,7 @@ très mal depuis une salle, et qu'il vaut mieux un seul endroit où chercher.
 
 ```jsonc
 "dependencies": {
-  "@scripteurist/streamlike-client": "git+ssh://git@github.com/guillaume-scripteurist/streamlike-client.git#v0.1.0"
+  "@scripteurist/streamlike-client": "git+ssh://git@github.com/guillaume-scripteurist/streamlike-client.git#v0.3.0"
 }
 ```
 
@@ -40,15 +41,63 @@ player.setSpeed(1.5);
 player.detach();   // retire l'iframe ET cesse d'écouter
 ```
 
-Deux réglages tout faits :
+Trois réglages tout faits :
 
 | Preset | Pour | Effet |
 | --- | --- | --- |
-| `broadcast` | écran TV, téléphone joueur | démarre seul, sans contrôles — il n'y a personne pour cliquer |
+| `broadcast` | écran TV, téléphone joueur | démarre seul et **muet**, sans contrôles — il n'y a personne pour cliquer |
 | `preview` | console d'administration | contrôles visibles, ne démarre pas dans le dos de l'organisateur |
+| `feed` | fil vertical sur téléphone | remplit la carte en rognant, démarre muet, plafonne la qualité à 720p |
 
-Les deux activent `events=1` : sans lui le player reste muet, et une file de
+Tous activent `events=1` : sans lui le player reste muet, et une file de
 diffusion s'arrête à la première vidéo.
+
+## Les autres cibles, et les autres paramètres
+
+```js
+import { buildPlayerUrl } from '@scripteurist/streamlike-client';
+
+buildPlayerUrl({ mediaId: 'abc' }, { pid: 'CFG42', userToken: 'u-123' });
+buildPlayerUrl({ liveId: 'canal-1' }, { controls: true });
+buildPlayerUrl({ streamoutId: 's-7' });
+
+// Ce qui n'a pas de nom dédié passe tel quel — le player en accepte ~70 :
+buildPlayerUrl({ permalink: 'marie' }, { params: { download: true, logo: false, skin: 'sombre' } });
+```
+
+`permalink` est préférable dans une URL que quelqu'un peut voir : il se lit, et
+il survit à une réimportation du média là où l'identifiant change.
+
+## Poser l'iframe à la bonne taille
+
+L'iframe du player n'a **aucune taille propre** : sans enveloppe, elle prend
+300 × 150, quelles que soient les règles CSS posées à côté.
+
+```js
+import { applyResponsiveFrame } from '@scripteurist/streamlike-client';
+
+// `ratio` vient de metadata.global.ratio de /ws/media ; 16/9 par défaut.
+const scene = applyResponsiveFrame(document.getElementById('boite'), media.ratio);
+player.attach(scene);
+```
+
+## Ce média va-t-il se lire ?
+
+Un catalogue n'est jamais entièrement lisible. Les trois drapeaux arrivent déjà
+dans la liste envoyée par le serveur : la question se tranche au rendu, sans un
+appel de plus.
+
+```js
+import { playability, isEmbeddable, probePlayerUrl } from '@scripteurist/streamlike-client';
+
+playability(media);   // 'open' | 'password' | 'restricted' | 'token-required'
+if (!isEmbeddable(media)) montrerLaVignetteEtUnMessage();
+```
+
+Un média protégé **à la fois** par jeton et par mot de passe se lit : le player
+réclame le mot de passe lui-même. `probePlayerUrl()` vérifie pour de bon, en
+`HEAD` : seul un **404** vaut échec — une erreur réseau ou un refus CORS ne
+prouvent rien, et masquer sur un doute retire du contenu qui se serait affiché.
 
 ## Le protocole, tel que Streamlike le documente
 
@@ -60,17 +109,30 @@ Le player **pousse** vers la page :
 ```
 
 La page lui **envoie**, en JSON : `["play"]` `["pause"]` `["stop"]`
+`["mute"]` `["unmute"]` `["fullscreen"]`
 `["seek", s]` `["speed", x]` `["volume", v]`.
 
 Pour une iframe posée en dur dans le HTML, `buildPlayerCommand()` sérialise au
 bon format sans passer par la classe.
 
-## Deux détails qui coûtent cher
+## Les détails qui coûtent cher
 
+- **La configuration de player s'appelle `pid`, pas `profile`.** Jusqu'à la
+  0.2.0 incluse, `profileId` émettait `profile=` — un paramètre que le player
+  ne connaît pas. Il l'ignorait sans rien dire et retombait sur les réglages par
+  défaut du compte, souvent proches, d'où l'absence de plainte : les couleurs,
+  le logo et les contrôles configurés dans le back-office n'ont jamais été
+  appliqués. `profileId` reste accepté et part désormais en `pid`.
+- **`autostart` sans `muted` ne démarre pas.** Les navigateurs refusent une
+  lecture automatique avec le son. La vidéo reste sur sa première image, sans
+  erreur et sans message. `EMBED_PRESETS.broadcast` porte donc les deux, et il
+  faut prévoir une porte « activer le son » côté page.
 - **Le filtrage se fait sur la fenêtre émettrice, pas sur l'origine.** Plusieurs
   players peuvent coexister sur une page (prévisualisation + diffusion) et
   partagent la même origine : sans ce filtrage, la prévisualisation de
   l'organisateur ferait enchaîner la file diffusée dans la salle.
+- **Un même état n'est pas ré-émis.** Le player répète son état ; propager deux
+  fois `ended` ferait sauter une vidéo dans une file.
 - **`clear()` pose `about:blank`, jamais une `src` vide.** Une `src` vide
   recharge la page *courante* dans l'iframe, et le son continue par-dessus la
   suite du programme.

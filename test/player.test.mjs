@@ -62,8 +62,12 @@ test('un hôte de remplacement est respecté', () => {
   assert.ok(buildEmbedUrl('p', { baseUrl: 'https://recette.exemple/' }).startsWith('https://recette.exemple/play?'));
 });
 
-test('un profil de player est transmis', () => {
-  assert.equal(new URL(buildEmbedUrl('p', { profileId: 'prof-9' })).searchParams.get('profile'), 'prof-9');
+test('un profil de player est transmis — en pid, pas en profile', () => {
+  // Ce test verrouillait le bug : il vérifiait `profile=`, que le player ne
+  // connaît pas. La configuration n'était donc jamais appliquée, en silence.
+  const url = new URL(buildEmbedUrl('p', { profileId: 'prof-9' }));
+  assert.equal(url.searchParams.get('pid'), 'prof-9');
+  assert.equal(url.searchParams.get('profile'), null);
 });
 
 // --- Détection de fin de lecture ---------------------------------------------
@@ -238,4 +242,109 @@ test('loadUrl() accepte une URL construite ailleurs et reste pilotable', () => {
   pousserDepuisIframe(player, '["sl-state","ended"]');
   assert.equal(fins, 1);
   player.detach();
+});
+
+/**
+ * Ce qui a changé en 0.3.0, et pourquoi ces cas-là précisément.
+ *
+ * Les deux premiers tests verrouillent des pannes SILENCIEUSES : un paramètre
+ * que le player ignore, et un démarrage automatique que le navigateur refuse.
+ * Ni l'un ni l'autre ne produit d'erreur — on constate simplement que « la
+ * vidéo ne part pas », des mois plus tard, dans une salle.
+ */
+import {
+  buildPlayerUrl,
+  aspectRatioPadding,
+  playability,
+  isEmbeddable,
+  applyResponsiveFrame,
+} from '../dist/index.js';
+
+test('la configuration de player part en pid, jamais en profile', () => {
+  const url = new URL(buildEmbedUrl('marie', { pid: 'CFG42' }));
+  assert.equal(url.searchParams.get('pid'), 'CFG42');
+  // `profile=` n'est pas un paramètre du player : il était ignoré en silence,
+  // et la configuration n'était jamais appliquée.
+  assert.equal(url.searchParams.get('profile'), null);
+});
+
+test('l\'ancien profileId reste accepté et devient pid', () => {
+  const url = new URL(buildEmbedUrl('marie', { profileId: 'CFG42' }));
+  assert.equal(url.searchParams.get('pid'), 'CFG42');
+});
+
+test('le préréglage broadcast est muet, sans quoi rien ne démarre', () => {
+  const url = new URL(buildEmbedUrl('marie', EMBED_PRESETS.broadcast));
+  assert.equal(url.searchParams.get('autostart'), '1');
+  // Les navigateurs refusent une lecture automatique avec le son. `autostart`
+  // seul laisse l'écran figé sur la première image, sans message.
+  assert.equal(url.searchParams.get('muted'), '1');
+});
+
+test('buildPlayerUrl vise le média par identifiant, live ou diffusion', () => {
+  assert.equal(new URL(buildPlayerUrl({ mediaId: 'abc' })).searchParams.get('med_id'), 'abc');
+  assert.equal(new URL(buildPlayerUrl({ liveId: 'canal1' })).searchParams.get('live_id'), 'canal1');
+  assert.equal(new URL(buildPlayerUrl({ streamoutId: 's1' })).searchParams.get('str_id'), 's1');
+});
+
+test('les paramètres sensibles sont traduits correctement', () => {
+  const url = new URL(buildPlayerUrl({ mediaId: 'abc' }, {
+    userToken: 'u-123', token: 'TOK', startAt: 42, subtitle: false,
+    audioLanguage: 'en-ad', maxHeight: 720, activeColor: '#FF0000',
+    params: { download: true, logo: false, skin: 'sombre' },
+  }));
+  assert.equal(url.searchParams.get('user_token'), 'u-123');
+  assert.equal(url.searchParams.get('sltoken'), 'TOK');
+  assert.equal(url.searchParams.get('streamlike_mp_starttc'), '42');
+  assert.equal(url.searchParams.get('subtitle'), '0');
+  assert.equal(url.searchParams.get('audio_lng'), 'en-ad');
+  assert.equal(url.searchParams.get('max_height'), '720');
+  // Le `#` couperait l'URL au fragment : tout ce qui suit disparaîtrait.
+  assert.equal(url.searchParams.get('active_color'), 'FF0000');
+  assert.equal(url.searchParams.get('download'), '1');
+  assert.equal(url.searchParams.get('logo'), '0');
+  assert.equal(url.searchParams.get('skin'), 'sombre');
+});
+
+test('un état répété n\'est pas ré-émis — sinon une file saute une vidéo', () => {
+  const player = new StreamlikePlayer();
+  player.attach(document.getElementById('scene'));
+  let ended = 0;
+  player.on('ended', () => { ended += 1; });
+  // On passe par le gestionnaire réel, avec la fenêtre de l'iframe comme source.
+  const iframe = document.querySelector('#scene iframe');
+  const evt = new dom.window.MessageEvent('message', {
+    data: JSON.stringify(['sl-state', 'ended']),
+  });
+  Object.defineProperty(evt, 'source', { value: iframe.contentWindow });
+  dom.window.dispatchEvent(evt);
+  dom.window.dispatchEvent(evt);
+  assert.equal(ended, 1);
+  assert.equal(player.state, 'ended');
+  player.detach();
+});
+
+test('le rapport d\'image retombe sur 16/9 plutôt que sur zéro', () => {
+  assert.equal(aspectRatioPadding(16 / 9), '56.25%');
+  assert.equal(aspectRatioPadding(2), '50%');
+  // Une hauteur nulle ne montrerait rien du tout.
+  assert.equal(aspectRatioPadding(0), '56.25%');
+  assert.equal(aspectRatioPadding(null), '56.25%');
+});
+
+test('l\'enveloppe responsive réserve la hauteur et pose une scène', () => {
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  const stage = applyResponsiveFrame(host, 2);
+  assert.equal(host.style.paddingTop, '50%');
+  assert.equal(stage.style.position, 'absolute');
+  // Appelée deux fois, elle réutilise la même scène plutôt que d'en empiler.
+  assert.equal(applyResponsiveFrame(host, 2), stage);
+});
+
+test('la lisibilité se tranche sur les drapeaux déjà reçus', () => {
+  assert.equal(playability({ isTokenized: true }), 'token-required');
+  assert.equal(playability({ isTokenized: true, hasPassword: true }), 'password');
+  assert.equal(isEmbeddable({ isSecured: true }), true);
+  assert.equal(isEmbeddable({ isTokenized: true }), false);
 });

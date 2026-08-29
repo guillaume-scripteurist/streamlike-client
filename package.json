@@ -1,6 +1,6 @@
 {
   "name": "@scripteurist/streamlike-client",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Player Streamlike côté navigateur : URL d'embed, pilotage postMessage, dépôt direct (mode dégradé). Agnostique du framework, sans dépendance.",
   "type": "module",
   "sideEffects": false,
@@ -34,6 +34,7 @@
   ],
   "license": "UNLICENSED",
   "devDependencies": {
+    "jsdom": "^25.0.0",
     "tsup": "^8.3.0",
     "typescript": "^5.9.0"
   },

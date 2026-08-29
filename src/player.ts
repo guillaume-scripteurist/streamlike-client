@@ -16,14 +16,15 @@
  *
  * La page lui ENVOIE, en JSON :
  *   `["play"]` `["pause"]` `["stop"]`
+ *   `["mute"]` `["unmute"]` `["fullscreen"]`
  *   `["seek", <secondes>]` `["speed", <facteur>]` `["volume", <0..1>]`
  */
-import { buildEmbedUrl, type EmbedOptions } from './embed';
+import { buildEmbedUrl, buildPlayerUrl, aspectRatioPadding, type EmbedOptions, type MediaRef } from './embed';
 
 export type PlayerState = 'play' | 'pause' | 'ended';
 
 export type PlayerCommand =
-  | { action: 'play' | 'pause' | 'stop' }
+  | { action: 'play' | 'pause' | 'stop' | 'mute' | 'unmute' | 'fullscreen' }
   | { action: 'seek' | 'speed' | 'volume'; value: number };
 
 export interface PlayerEvents {
@@ -97,6 +98,8 @@ export interface StreamlikePlayerOptions extends EmbedOptions {
 export class StreamlikePlayer {
   private iframe: HTMLIFrameElement | null = null;
   private container: HTMLElement | null = null;
+  private lastState: PlayerState | null = null;
+  private lastProgress = 0;
   private readonly listeners = new Map<keyof PlayerEvents, Set<Listener<any>>>();
   private readonly onWindowMessage: (event: MessageEvent) => void;
 
@@ -114,7 +117,9 @@ export class StreamlikePlayer {
     iframe.style.border = '0';
     iframe.style.width = '100%';
     iframe.style.height = '100%';
-    iframe.allow = this.options.allow || 'autoplay; fullscreen; encrypted-media';
+    // `autoplay` conditionne le démarrage autonome, `fullscreen` le bouton
+    // plein écran : sans eux dans `allow`, les deux échouent silencieusement.
+    iframe.allow = this.options.allow || 'autoplay; fullscreen; encrypted-media; picture-in-picture';
     iframe.allowFullscreen = true;
     container.appendChild(iframe);
     this.iframe = iframe;
@@ -123,9 +128,17 @@ export class StreamlikePlayer {
     return this;
   }
 
-  /** Charge un média. Remplace celui en cours de lecture, le cas échéant. */
+  /** Charge un média par son permalink. Remplace celui en cours, le cas échéant. */
   load(permalink: string, options: EmbedOptions = {}): this {
     return this.loadUrl(buildEmbedUrl(permalink, { ...this.options, ...options }));
+  }
+
+  /**
+   * Charge n'importe quelle cible du player : permalink, identifiant, direct,
+   * diffusion programmée.
+   */
+  loadMedia(ref: MediaRef, options: EmbedOptions = {}): this {
+    return this.loadUrl(buildPlayerUrl(ref, { ...this.options, ...options }));
   }
 
   /**
@@ -138,6 +151,11 @@ export class StreamlikePlayer {
    */
   loadUrl(url: string): this {
     if (!this.iframe) throw new Error('StreamlikePlayer : appelez attach() avant load().');
+    // L'état est remis à zéro AVANT le changement de source : sans cela, un
+    // enchaînement de file croirait la vidéo suivante déjà terminée pendant les
+    // quelques centaines de millisecondes que met le nouveau player à parler.
+    this.lastState = null;
+    this.lastProgress = 0;
     this.iframe.src = url;
     return this;
   }
@@ -156,9 +174,32 @@ export class StreamlikePlayer {
 
   play() { return this.command({ action: 'play' }); }
   pause() { return this.command({ action: 'pause' }); }
+  stop() { return this.command({ action: 'stop' }); }
+  /**
+   * Coupe le son.
+   *
+   * Distinct de `setVolume(0)` : un démarrage automatique n'est autorisé par le
+   * navigateur que sur un player DÉCLARÉ muet. Baisser le volume à zéro ne
+   * suffit pas — la lecture est refusée quand même.
+   */
+  mute() { return this.command({ action: 'mute' }); }
+  unmute() { return this.command({ action: 'unmute' }); }
+  /**
+   * Bascule le plein écran.
+   *
+   * Le navigateur ne l'accorde que sur un geste de l'utilisateur : appelée
+   * depuis un `setTimeout` ou une réponse réseau, la commande est ignorée.
+   */
+  toggleFullscreen() { return this.command({ action: 'fullscreen' }); }
   seek(seconds: number) { return this.command({ action: 'seek', value: seconds }); }
   setSpeed(rate: number) { return this.command({ action: 'speed', value: rate }); }
   setVolume(level: number) { return this.command({ action: 'volume', value: level }); }
+
+  /** Dernier état poussé par le player, ou `null` tant qu'il n'a rien dit. */
+  get state(): PlayerState | null { return this.lastState; }
+
+  /** Dernière position connue, en secondes. */
+  get position(): number { return this.lastProgress; }
 
   on<K extends keyof PlayerEvents>(event: K, listener: Listener<K>): this {
     if (!this.listeners.has(event)) this.listeners.set(event, new Set());
@@ -215,11 +256,16 @@ export class StreamlikePlayer {
     if (!Array.isArray(value)) return;
 
     if (value[0] === 'sl-progress') {
-      this.emit('progress', Number(value[1]) || 0);
+      this.lastProgress = Number(value[1]) || 0;
+      this.emit('progress', this.lastProgress);
       return;
     }
     if (value[0] === 'sl-state') {
       const state = value[1] as PlayerState;
+      // Le player répète son état ; `ended` émis deux fois ferait sauter une
+      // vidéo dans une file. On ne propage que les CHANGEMENTS.
+      if (state === this.lastState) return;
+      this.lastState = state;
       this.emit('state', state);
       if (state === 'ended') this.emit('ended', undefined as void);
     }
