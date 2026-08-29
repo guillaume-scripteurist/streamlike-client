@@ -15,7 +15,7 @@ très mal depuis une salle, et qu'il vaut mieux un seul endroit où chercher.
 
 ```jsonc
 "dependencies": {
-  "@scripteurist/streamlike-client": "git+ssh://git@github.com/guillaume-scripteurist/streamlike-client.git#v0.3.0"
+  "@scripteurist/streamlike-client": "git+ssh://git@github.com/guillaume-scripteurist/streamlike-client.git#v0.3.1"
 }
 ```
 
@@ -45,7 +45,7 @@ Trois réglages tout faits :
 
 | Preset | Pour | Effet |
 | --- | --- | --- |
-| `broadcast` | écran TV, téléphone joueur | démarre seul et **muet**, sans contrôles — il n'y a personne pour cliquer |
+| `broadcast` | écran de salle | démarre seul **avec le son**, sans contrôles — il n'y a personne pour cliquer |
 | `preview` | console d'administration | contrôles visibles, ne démarre pas dans le dos de l'organisateur |
 | `feed` | fil vertical sur téléphone | remplit la carte en rognant, démarre muet, plafonne la qualité à 720p |
 
@@ -123,10 +123,16 @@ bon format sans passer par la classe.
   défaut du compte, souvent proches, d'où l'absence de plainte : les couleurs,
   le logo et les contrôles configurés dans le back-office n'ont jamais été
   appliqués. `profileId` reste accepté et part désormais en `pid`.
-- **`autostart` sans `muted` ne démarre pas.** Les navigateurs refusent une
-  lecture automatique avec le son. La vidéo reste sur sa première image, sans
-  erreur et sans message. `EMBED_PRESETS.broadcast` porte donc les deux, et il
-  faut prévoir une porte « activer le son » côté page.
+- **`autostart` seul ne démarre pas — et `muted` n'est pas toujours la bonne
+  réponse.** Les navigateurs refusent une lecture automatique **avec le son**
+  tant que la page n'a pas reçu de geste. Deux issues, une par situation :
+  une **porte** cliquée une fois par l'organisateur (« Activer le son »), et la
+  lecture démarre avec le son ; ou `muted: true`, qui démarre à coup sûr mais en
+  silence. Ne rien faire des deux laisse l'image figée, sans erreur.
+  `broadcast` **garde le son** : c'est l'objet d'une diffusion en salle, et les
+  pages qui l'utilisent ont une porte. `feed`, qui vise une carte de fil sans
+  porte, est muet. Forcer `muted` dans `broadcast` réglerait le second cas en
+  cassant le premier — une salle muette, qui ne se découvre que le soir même.
 - **Le filtrage se fait sur la fenêtre émettrice, pas sur l'origine.** Plusieurs
   players peuvent coexister sur une page (prévisualisation + diffusion) et
   partagent la même origine : sans ce filtrage, la prévisualisation de

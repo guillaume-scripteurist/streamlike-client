@@ -273,12 +273,21 @@ test('l\'ancien profileId reste accepté et devient pid', () => {
   assert.equal(url.searchParams.get('pid'), 'CFG42');
 });
 
-test('le préréglage broadcast est muet, sans quoi rien ne démarre', () => {
+test('broadcast garde le SON : une salle muette ne se voit qu\'en salle', () => {
   const url = new URL(buildEmbedUrl('marie', EMBED_PRESETS.broadcast));
   assert.equal(url.searchParams.get('autostart'), '1');
-  // Les navigateurs refusent une lecture automatique avec le son. `autostart`
-  // seul laisse l'écran figé sur la première image, sans message.
+  // Forcer `muted` ici réglerait le cas « pas de porte » en cassant le cas
+  // « écran de salle » : la vidéo passerait, sans le son, et personne ne s'en
+  // apercevrait avant le soir même. La page qui n'a pas de porte demande
+  // `muted` explicitement, ou prend le préréglage `feed`.
+  assert.equal(url.searchParams.get('muted'), null);
+});
+
+test('feed est muet, lui, parce qu\'une carte de fil n\'a pas de porte', () => {
+  const url = new URL(buildEmbedUrl('marie', EMBED_PRESETS.feed));
+  assert.equal(url.searchParams.get('autostart'), '1');
   assert.equal(url.searchParams.get('muted'), '1');
+  assert.equal(url.searchParams.get('max_height'), '720');
 });
 
 test('buildPlayerUrl vise le média par identifiant, live ou diffusion', () => {

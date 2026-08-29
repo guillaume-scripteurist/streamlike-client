@@ -34,10 +34,12 @@ export interface EmbedOptions {
    * Démarrer seul.
    *
    * Sur un écran TV, il n'y a personne pour cliquer — mais **les navigateurs
-   * refusent une lecture automatique avec le son**. `autostart` sans `muted`
-   * est donc la panne la plus fréquente de tout ce fichier : la vidéo reste sur
-   * sa première image, sans erreur, sans message. La paire qui fonctionne est
-   * `autostart: true, muted: true`, avec une porte « activer le son » côté page.
+   * refusent une lecture automatique avec le son** tant que la page n'a pas
+   * reçu de geste. Deux façons de s'en sortir, et il faut en choisir une :
+   * une **porte** cliquée une fois (« Activer le son »), qui laisse la lecture
+   * démarrer avec le son ; ou `muted: true`, qui démarre à coup sûr mais en
+   * silence. Ne rien faire des deux laisse l'image figée sur sa première
+   * frame, sans erreur et sans message.
    */
   autostart?: boolean;
   /**
@@ -187,17 +189,36 @@ export function buildPlayerUrl(ref: MediaRef, options: EmbedOptions = {}): strin
 /**
  * Réglages des usages courants, pour ne pas les redécrire à chaque appel.
  *
- * `broadcast` — diffusion sur un écran (TV spectateur, téléphone joueur) :
- *   personne pour cliquer, on masque les contrôles et on écoute la fin de
- *   lecture pour enchaîner. **`muted` y est indispensable** : sans lui le
- *   navigateur refuse le démarrage autonome, et l'écran reste figé.
+ * `broadcast` — diffusion sur un écran de salle : personne pour cliquer, on
+ *   masque les contrôles et on écoute la fin de lecture pour enchaîner.
+ *   **Le son est conservé**, parce que c'est tout l'objet d'une diffusion en
+ *   salle — voir l'avertissement ci-dessous sur `autostart`.
  * `preview`   — prévisualisation dans la console : l'organisateur pilote, on
  *   lui laisse les contrôles et on ne démarre pas dans son dos.
  * `feed`      — carte d'un fil vertical sur téléphone : remplit la carte,
  *   démarre en silence, et plafonne la qualité pour ne pas vider le forfait.
+ *
+ * ## `autostart` : ce que le préréglage ne peut PAS décider à votre place
+ *
+ * Les navigateurs refusent une lecture automatique **avec le son** tant que la
+ * page n'a pas reçu de geste de l'utilisateur. Deux situations, et une seule
+ * bonne réponse par situation :
+ *
+ * - **la page a une porte** (« Activer le son et rejoindre l'écran », cliquée
+ *   par l'organisateur en début de soirée) : le geste est acquis, et le player
+ *   démarre AVEC le son. C'est le cas d'un écran de salle, et c'est pourquoi
+ *   `broadcast` ne force pas `muted` ;
+ * - **la page n'a pas de porte** (une carte de fil qu'on fait défiler, une
+ *   vignette qui s'anime) : il FAUT `muted: true`, sans quoi l'image reste
+ *   figée sur la première frame, sans erreur et sans message. C'est ce que
+ *   fait `feed`.
+ *
+ * Forcer `muted` dans `broadcast` réglerait le second cas en cassant le
+ * premier — une diffusion muette dans une salle, qui ne se découvre que le
+ * soir même.
  */
 export const EMBED_PRESETS = {
-  broadcast: { events: true, controls: false, playButton: false, autostart: true, muted: true },
+  broadcast: { events: true, controls: false, playButton: false, autostart: true },
   preview: { events: true, controls: true, playButton: true, autostart: false },
   feed: {
     events: true, controls: false, playButton: false, autostart: true, muted: true,
